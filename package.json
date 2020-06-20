@@ -1,6 +1,6 @@
 {
   "name": "graphql-subscriptions",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "GraphQL subscriptions for node.js",
   "main": "dist/index.js",
   "repository": {
@@ -14,6 +14,7 @@
     "graphql": "^0.10.5 || ^0.11.3 || ^0.12.0 || ^0.13.0 || ^14.0.0"
   },
   "scripts": {
+    "prepare": "tsc",
     "clean": "rimraf dist coverage",
     "compile": "tsc",
     "pretest": "npm run compile",
