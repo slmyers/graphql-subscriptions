@@ -1,4 +1,4 @@
-import { $$asyncIterator } from 'iterall';
+import { $$asyncIterator, $$iterator } from 'iterall';
 
 export type FilterFn = (rootValue?: any, args?: any, context?: any, info?: any) => boolean | Promise<boolean>;
 export type ResolverFn = (rootValue?: any, args?: any, context?: any, info?: any) => AsyncIterator<any>;
@@ -6,38 +6,27 @@ export type ResolverFn = (rootValue?: any, args?: any, context?: any, info?: any
 export const withFilter = (asyncIteratorFn: ResolverFn, filterFn: FilterFn): ResolverFn => {
   return (rootValue: any, args: any, context: any, info: any): AsyncIterator<any> => {
     const asyncIterator = asyncIteratorFn(rootValue, args, context, info);
-
     const getNextPromise = () => {
-      return new Promise<IteratorResult<any>>((resolve, reject) => {
+      return new Promise<IteratorResult<any>>(async (resolve, reject) => {
+        try {
+          for await (const payload of transformToAsyncIterable(asyncIterator)) {
+            if (payload.done) {
+              resolve(payload);
+              break;
+            }
 
-        const inner = () => {
-          asyncIterator
-            .next()
-            .then(payload => {
-              if (payload.done === true) {
+            try {
+              if (filterFn(payload.value, args, context, info)) {
                 resolve(payload);
-                return;
+                break;
               }
-              Promise.resolve(filterFn(payload.value, args, context, info))
-                .catch(() => false) // We ignore errors from filter function
-                .then(filterResult => {
-                  if (filterResult === true) {
-                    resolve(payload);
-                    return;
-                  }
-                  // Skip the current value and wait for the next one
-                  inner();
-                  return;
-                });
-            })
-            .catch((err) => {
-              reject(err);
-              return;
-            });
-        };
-
-        inner();
-
+            } catch (e) {
+              if (context.onFilterError) context.onFilterError(e);
+            }
+          }
+        } catch(error) {
+          reject(error);
+        }
       });
     };
 
@@ -59,3 +48,18 @@ export const withFilter = (asyncIteratorFn: ResolverFn, filterFn: FilterFn): Res
     return asyncIterator2;
   };
 };
+
+function transformToAsyncIterable(it: AsyncIterator<any>): any {
+  return {
+    async *[Symbol.asyncIterator]() {
+      let curr = await it.next()
+      while(true) {
+        yield curr;
+        if (curr.done) {
+          break;
+        }
+        curr = await it.next()
+      }
+    }
+  }
+}
